@@ -112,7 +112,7 @@ Refer to sample config files `yolov2.txt`, `yolov2-tiny.txt`, `yolov3.txt` and `
 
 1. If you want to use the `nvyolo` plugin with the deepstream-app, you will need to modify the deepstream-apps' source code to read nvyolo plugins' properties and add it to the pipeline. You can refer the `ds-example` plugin in `deepstream_config_file_parser.c` and make equivalent changes required for the `nvyolo` plugin. Specifically refer to `parse_dsexample` function and its usage in `deepstream_app_config_parser.c`
 
-## Installing Python Package (setup and source adapted from [YOLO3-4-Py](https://github.com/madhawav/YOLO3-4-Py) ##
+## Installing Python Package (setup and source adapted from [YOLO3-4-Py](https://github.com/madhawav/YOLO3-4-Py)) ##
 
 Using cython, the C++ libraries can be imported and used in Python3.
 
