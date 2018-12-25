@@ -111,3 +111,22 @@ Refer to sample config files `yolov2.txt`, `yolov2-tiny.txt`, `yolov3.txt` and `
 ### Note ###
 
 1. If you want to use the `nvyolo` plugin with the deepstream-app, you will need to modify the deepstream-apps' source code to read nvyolo plugins' properties and add it to the pipeline. You can refer the `ds-example` plugin in `deepstream_config_file_parser.c` and make equivalent changes required for the `nvyolo` plugin. Specifically refer to `parse_dsexample` function and its usage in `deepstream_app_config_parser.c`
+
+## Installing Python Package (setup and source adapted from [YOLO3-4-Py](https://github.com/madhawav/YOLO3-4-Py) ##
+
+Using cython, the C++ libraries can be imported and used in Python3.
+
+`$ cd sources/python`  
+`$ sudo -s`  
+`$ make install` for dictionary type detection information OR `$ make install-yolo34py` for yolo34py detection information compatible library 
+
+To get more installation options use:  
+`$ make help`  
+
+To test, pass a video source to video_demo.py. Always specify a flagfile option:  
+`$ python3 video_demo.py --flagfile=/absolute/path/to/your/config/file`  
+
+Copy the config file from `config` folder and make the necessary changes. Remember to include the following with absolute paths:  
+`--wts_file_path --config_file_path --labels_file_path --calibration_table_path --calibration_images --engine_file_path`  
+
+For both `calibration_table_path` `calibration_images` and `engine_file_path` specify the path you want the calibration table and engines to be saved. They have to be generated only once.
