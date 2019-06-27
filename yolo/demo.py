@@ -1,30 +1,29 @@
-from build.YoloV3 import YoloV3
+from build.YoloV3 import YoloV3, InferParams, NetworkInfo
 import cv2 as cv
 # import line_profiler
 import numpy as np
 
 baseDirectory = '/home/user/Documents/yolov3_onnx_plugin'
 
-NetworkInfo = {
-  "networkType" : "yolov3",
-  "configFilePath" : "{}/yolov3.cfg".format(baseDirectory),
-  "wtsFilePath" : "{}/yolov3.weights".format(baseDirectory),
-  "labelsFilePath" : "{}/coco_labels.txt".format(baseDirectory),
-  "precision" : "kHALF",
-  "deviceType" : "kGPU",
-  "calibrationTablePath" : "/tmp/calibrate.txt",
-  "enginePath" : "/tmp/yolo.engine",
-  "inputBlobName" : "data"
-}
+n = NetworkInfo()
+i = InferParams()
 
-InferParams = {
-  "printPerfInfo" : False,
-  "printPredictionInfo" : False,
-  "calibImages" : "/tmp/list.txt",
-  "calibImagesPath" : "/tmp/path.txt",
-  "probThresh" : 0.7,
-  "nmsThresh" : 0.5
-}
+n.networkType = "yolov3"
+n.configFilePath = "{}/yolov3.cfg".format(baseDirectory)
+n.wtsFilePath = "{}/yolov3.weights".format(baseDirectory)
+n.labelsFilePath = "{}/coco_labels.txt".format(baseDirectory)
+n.precision = "kHALF"
+n.deviceType = "kGPU"
+n.calibrationTablePath = "/tmp/calibrate.txt"
+n.enginePath = "/tmp/yolo.trt"
+n.inputBlobName = "data"
+
+i.printPerfInfo = False
+i.printPredictionInfo = False
+i.calibImages = "/tmp/list.txt"
+i.calibImagesPath = "/tmp/path.txt"
+i.probThresh = 0.7
+i.nmsThresh = 0.5
 
 def draw_bboxes(image_raw, results):
   for result in results:
@@ -53,7 +52,7 @@ def main():
       break
 
 if __name__ == '__main__':
-  yolov3 = YoloV3(1, NetworkInfo, InferParams)
+  yolov3 = YoloV3(1, n, i)
   cap = cv.VideoCapture(input_video_path)
 
   main()
