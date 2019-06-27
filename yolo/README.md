@@ -72,10 +72,20 @@ The trt-yolo-app located at `apps/trt-yolo` is a sample standalone app, which ca
 Refer to sample config files `yolov2.txt`, `yolov2-tiny.txt`, `yolov3.txt` and `yolov3-tiny.txt` in `config/` directory.    
 Test images for inference are to be added in the `test_images.txt` file in `data/`directory. Additionally run `$ trt-yolo-app --help` for a complete list of config parameters.
 
+### Python3 Binding ###
+
+For now, the Python3 binding can be built by doing the following commands:  
+
+`$ mkdir build;cd build`  
+`$ cmake .. -DPYBIND11_DIR=${PYBIND11_ROOTDIR}/pybind11 -DCMAKE_BUILD_TYPE=Release`  
+`$ make -j8`  
+
+From the root Yolo directory, you can just import YoloV3 class from the build directory. A sample `demo.py` is provided in the root directory for Yolo.  
+
 #### Note ####
 
 1. If you want to generate your own calibration table, use the `calibration_images.txt` file to list of images to be used for calibration and delete the default calibration table.
 
 2. If you want to use the `nvyolo` plugin with the deepstream-app, you will need to modify the deepstream-apps' source code to read nvyolo plugins' properties and add it to the pipeline. You can refer the `ds-example` plugin in `deepstream_config_file_parser.c` and make equivalent changes required for the `nvyolo` plugin. Specifically refer to `parse_dsexample` function and its usage in `deepstream_app_config_parser.c`
 
-2. Tegra users working with Deepstream 1.5 and Jetpack 3.3 will have to regenerate the `.cache` files to use the standard caffe models available in the SDK. This can be done by deleting all the `.cache` files in `/home/nvidia/Model` directory and all its subdirectories and then running the nvgstiva-app using the default config file.
+3. Tegra users working with Deepstream 1.5 and Jetpack 3.3 will have to regenerate the `.cache` files to use the standard caffe models available in the SDK. This can be done by deleting all the `.cache` files in `/home/nvidia/Model` directory and all its subdirectories and then running the nvgstiva-app using the default config file.

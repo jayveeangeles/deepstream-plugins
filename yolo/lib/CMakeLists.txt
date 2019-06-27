@@ -24,16 +24,38 @@
 # */
 
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+# file(GLOB CXX_SRCS ${CMAKE_SOURCE_DIR}/lib/*.cpp)
+# file(GLOB CU_SRCS ${CMAKE_SOURCE_DIR}/lib/*.cu)
+
 file(GLOB CXX_SRCS *.cpp)
 file(GLOB CU_SRCS *.cu)
 
 find_package(PkgConfig)
+find_package(CUDA)
+find_package(OpenCV)
+
 pkg_check_modules(GLIB REQUIRED glib-2.0)
 
-include_directories(${CUDA_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS} ${TRT_INCLUDE_DIR} ${GLIB_INCLUDE_DIRS} ${GLFAGS_INCLUDE_DIRS} )
+# Sets variable to a value if variable is unset.
+macro(set_ifndef var val)
+    if(NOT ${var})
+        set(${var} ${val})
+    endif()
+    message(STATUS "Configurable variable ${var} set to ${${var}}")
+endmacro()
+
+set_ifndef(TRT_INC_DIR /usr/include/aarch64-linux-gnu)
+
+find_library(_NVINFER_LIB nvinfer HINTS ${TRT_LIB_DIR} PATH_SUFFIXES lib lib64 aarch64-linux-gnu)
+set_ifndef(NVINFER_LIB ${_NVINFER_LIB})
+
+find_library(_NVINFER_PLUGIN_LIB nvinfer_plugin HINTS ${TRT_LIB_DIR} PATH_SUFFIXES lib lib64 aarch64-linux-gnu)
+set_ifndef(NVINFER_PLUGIN_LIB ${_NVINFER_PLUGIN_LIB})
+
+include_directories(${CUDA_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS} ${TRT_INC_DIR} ${GLIB_INCLUDE_DIRS} ${GLFAGS_INCLUDE_DIRS} )
 link_directories(${CUDA_TOOLKIT_ROOT_DIR}/lib64)
 
-CUDA_COMPILE(CU_OBJS ${CU_SRCS})
-add_library(yolo-lib STATIC ${CXX_SRCS} ${CU_OBJS})
+CUDA_COMPILE(CU_OBJS ${CU_SRCS} OPTIONS  "--compiler-options=-fPIC --shared --ptxas-options=-v --use_fast_math -gencode arch=compute_72,code=sm_72")
+add_library(yolo-lib SHARED ${CXX_SRCS} ${CU_OBJS})
 
-target_link_libraries(yolo-lib cudart cudnn cublas ${OpenCV_LIBRARIES} ${TRT_LIBRARY_INFER} ${TRT_LIBRARY_INFER_PLUGIN} gflags stdc++fs dl)
+target_link_libraries(yolo-lib cudart cudnn cublas ${OpenCV_LIBRARIES} ${NVINFER_LIB} ${NVINFER_PLUGIN_LIB} gflags stdc++fs dl)
