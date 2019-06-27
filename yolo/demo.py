@@ -28,11 +28,8 @@ InferParams = {
 
 def draw_bboxes(image_raw, results):
   for result in results:
-    # cv.rectangle(image_raw, (int(x-w/2),int(y-h/2)),(int(x+w/2),int(y+h/2)),(255,0,0), 3)
-    # cv.putText(image_raw, all_categories[category], (int(x), int(y)), cv.FONT_HERSHEY_COMPLEX, 1, (255, 255, 0))
-
     cv.rectangle(image_raw, (int(result.box.x1),int(result.box.y1)),(int(result.box.x2),int(result.box.y2)),(255,0,0), 3)
-    # cv.putText(image_raw, yolov3.getClassName(category), (int(x1), int(y1)), cv.FONT_HERSHEY_COMPLEX, 1, (255, 255, 0))
+    cv.putText(image_raw, yolov3.getClassName(result.label), (int(result.box.x1), int(result.box.y1)), cv.FONT_HERSHEY_COMPLEX, 1, (255, 255, 0))
 
   return image_raw
   
