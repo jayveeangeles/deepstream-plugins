@@ -26,8 +26,6 @@ static inline Mat getLetterBoxBlob(const Mat& origImage, const int& inputH,
   // letterboxed Image given to the network as input
   cv::Mat m_LetterboxImage;
 
-  origImage;
-
   if (!origImage.data || origImage.cols <= 0 || origImage.rows <= 0)
   {
     cout << "Image is not valid" << endl;

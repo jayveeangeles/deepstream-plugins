@@ -15,7 +15,7 @@ n.labelsFilePath = "{}/coco_labels.txt".format(baseDirectory)
 n.precision = "kHALF"
 n.deviceType = "kGPU"
 n.calibrationTablePath = "/tmp/calibrate.txt"
-n.enginePath = "/tmp/yolo.trt"
+n.enginePath = "/tmp/yolo.engine"
 n.inputBlobName = "data"
 
 i.printPerfInfo = False
@@ -40,13 +40,16 @@ def main():
   while True:
     # read frame
     r, frame = cap.read()
-    np_frame = np.array(frame, dtype=np.float32, order='C')
 
-    results = yolov3.detect(np_frame)
+    if r:
+      np_frame = np.array(frame, dtype=np.float32, order='C')
 
-    output_frame = draw_bboxes(frame, results)
-    cv.imshow('preview', output_frame)
-    
+      results = yolov3.detect(np_frame)
+
+      output_frame = draw_bboxes(frame, results)
+      cv.imshow('preview', output_frame)
+    else: break
+      
     k = cv.waitKey(1)
     if k == 0xFF & ord('q'):
       break
