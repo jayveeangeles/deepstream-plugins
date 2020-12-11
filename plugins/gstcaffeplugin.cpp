@@ -399,8 +399,8 @@ gst_caffeplugin_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
 
     meta->confidence = result.confidence;
     meta->label = g_strdup(result.label.c_str());
-    meta->xmin = static_cast<guint>(result.box.x1);
-    meta->ymin = static_cast<guint>(result.box.y1);
+    meta->xmin = static_cast<guint>(result.box.x1 >= 0 ? result.box.x1 : 0.0);
+    meta->ymin = static_cast<guint>(result.box.y1 >= 0 ? result.box.y1 : 0.0);
     meta->xmax = static_cast<guint>(result.box.x2);
     meta->ymax = static_cast<guint>(result.box.y2);
   }
