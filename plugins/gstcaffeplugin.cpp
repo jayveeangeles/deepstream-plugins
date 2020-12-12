@@ -213,10 +213,10 @@ gst_caffeplugin_init (GstCaffePlugin * caffeplugin)
   caffeplugin->weights_file = g_strdup (DEFAULT_EMPTY_STRING);
   caffeplugin->nms = DEFAULT_NMS_THRE;
   caffeplugin->confidence = DEFAULT_CONFIDENCE_THRE;
-  caffeplugin->skipInterval = 0;
-  caffeplugin->inferLoopLimit = DEFAULT_INFERENCE_BUSY_LOOPS;
-  caffeplugin->preprocessDeadline = DEFAULT_PREPROCESS_IMAGE_DEADLINE;
-  caffeplugin->drawResults = 0;
+  caffeplugin->skip_interval = 0;
+  caffeplugin->infer_loop_limit = DEFAULT_INFERENCE_BUSY_LOOPS;
+  caffeplugin->preprocess_deadline = DEFAULT_PREPROCESS_IMAGE_DEADLINE;
+  caffeplugin->draw_results = 0;
 }
 
 /* Function called when a property of the element is set. Standard boilerplate.
@@ -255,16 +255,16 @@ gst_caffeplugin_set_property (GObject * object, guint prop_id,
       caffeplugin->confidence = g_value_get_float (value);
       break;
     case PROP_SKIP_FRAME_INTERVAL:
-      caffeplugin->skipInterval = g_value_get_uint(value);
+      caffeplugin->skip_interval = g_value_get_uint(value);
       break;
     case PROP_INFERENCE_BUSY_LOOPS:
-      caffeplugin->inferLoopLimit = g_value_get_uint(value);
+      caffeplugin->infer_loop_limit = g_value_get_uint(value);
       break;
     case PROP_PREPROCESS_IMAGE_DEADLINE:
-      caffeplugin->preprocessDeadline = g_value_get_uint(value);
+      caffeplugin->preprocess_deadline = g_value_get_uint(value);
       break;
     case PROP_DRAW_RESULTS_ON_FRAME:
-      caffeplugin->drawResults = g_value_get_boolean(value);
+      caffeplugin->draw_results = g_value_get_boolean(value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -301,16 +301,16 @@ gst_caffeplugin_get_property (GObject * object, guint prop_id, GValue * value,
       g_value_set_float (value, caffeplugin->confidence);
       break;
     case PROP_SKIP_FRAME_INTERVAL:
-      g_value_set_uint(value, caffeplugin->skipInterval);
+      g_value_set_uint(value, caffeplugin->skip_interval);
       break;
     case PROP_INFERENCE_BUSY_LOOPS:
-      g_value_set_uint(value, caffeplugin->inferLoopLimit);
+      g_value_set_uint(value, caffeplugin->infer_loop_limit);
       break;
     case PROP_PREPROCESS_IMAGE_DEADLINE:
-      g_value_set_uint(value, caffeplugin->preprocessDeadline);
+      g_value_set_uint(value, caffeplugin->preprocess_deadline);
       break;
     case PROP_DRAW_RESULTS_ON_FRAME:
-      g_value_set_boolean(value, caffeplugin->drawResults);
+      g_value_set_boolean(value, caffeplugin->draw_results);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -331,8 +331,8 @@ gst_caffeplugin_start (GstBaseTransform * btrans)
     caffeplugin->weights_file,
     caffeplugin->nms, 
     caffeplugin->confidence,
-    caffeplugin->inferLoopLimit,
-    caffeplugin->preprocessDeadline
+    caffeplugin->infer_loop_limit,
+    caffeplugin->preprocess_deadline
   };
 
   if ((!caffeplugin->network)
@@ -419,15 +419,15 @@ gst_caffeplugin_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
   GstDetectionMetas *metas = GST_DETECTIONMETAS_ADD(inbuf);
   metas->detections_count = 0;
 
-  bool doSkipFrames = caffeplugin->skipInterval > 0 ? true : false;
+  bool doSkipFrames = caffeplugin->skip_interval > 0 ? true : false;
 
   caffeplugin->frame_num++;
 
   if ((doSkipFrames) && \
-    ((caffeplugin->frame_num % caffeplugin->skipInterval) == 0)) {
+    ((caffeplugin->frame_num % caffeplugin->skip_interval) == 0)) {
 
     g_info("skipping frame %d due to skip interval[%d] setting\n", \
-      caffeplugin->frame_num, caffeplugin->skipInterval);
+      caffeplugin->frame_num, caffeplugin->skip_interval);
     return flow_ret;
   }
   // CHECK_CUDA_STATUS (cudaSetDevice (caffeplugin->gpu_id),
@@ -475,7 +475,7 @@ gst_caffeplugin_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
     meta->xmax = static_cast<guint>(result.box.x2);
     meta->ymax = static_cast<guint>(result.box.y2);
 
-    if (caffeplugin->drawResults) {
+    if (caffeplugin->draw_results) {
       sprintf(label_n_confidence, "%s (%.3f)", meta->label, meta->confidence);
 
       cv::rectangle(img, cv::Point(meta->xmin, meta->ymin), \
