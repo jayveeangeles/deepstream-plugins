@@ -85,6 +85,8 @@ struct CaffeNetworkParams : public samplesCommon::CaffeSampleParams
   int outputClsSize;                      //!< The number of output classes
   std::string serializedWeightsFileName;  //!< Filename + Location of serialized engine
   std::string classesFileName;            //!< Classnames file to be detected
+  uint preprocessDeadline      = 20000;   //!< Max time image can be resized
+  unsigned int inferLoopLimit  = 60;      //!< Will wait for 60, 500us loops (30ms)
 };
 
 //!

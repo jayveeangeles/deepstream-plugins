@@ -45,7 +45,11 @@ enum
   PROP_MODEL_PATH,
   PROP_WEIGHTS_FILENAME,
   PROP_NMS_THRESHOLD,
-  PROP_CONFIDENCE_THRESHOLD
+  PROP_CONFIDENCE_THRESHOLD,
+  PROP_SKIP_FRAME_INTERVAL,
+  PROP_INFERENCE_BUSY_LOOPS,
+  PROP_PREPROCESS_IMAGE_DEADLINE,
+  PROP_DRAW_RESULTS_ON_FRAME,
 };
 
 /* Default values for properties */
@@ -53,6 +57,8 @@ enum
 #define DEFAULT_EMPTY_STRING ""
 #define DEFAULT_NMS_THRE 0.4
 #define DEFAULT_CONFIDENCE_THRE 0.5
+#define DEFAULT_INFERENCE_BUSY_LOOPS 60
+#define DEFAULT_PREPROCESS_IMAGE_DEADLINE 20000
 
 #define CHECK_CUDA_STATUS(cuda_status,error_str) do { \
   if ((cuda_status) != cudaSuccess) { \
@@ -153,6 +159,29 @@ gst_caffeplugin_class_init (GstCaffePluginClass * klass)
           0, 1.0, DEFAULT_CONFIDENCE_THRE,
           (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
+  g_object_class_install_property (gobject_class, PROP_SKIP_FRAME_INTERVAL,
+      g_param_spec_uint ("skip-interval", "Skip Frame Interval",
+          "Skip frame every X interval.",
+          0, 120, 0,
+          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
+  g_object_class_install_property (gobject_class, PROP_INFERENCE_BUSY_LOOPS,
+    g_param_spec_uint ("infer-loops", "Inference Loops",
+        "Number of 500us loops to sleep before timing out during inference.",
+        0, 120, 60,
+        (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
+  g_object_class_install_property (gobject_class, PROP_PREPROCESS_IMAGE_DEADLINE,
+    g_param_spec_uint ("preprocess-deadline", "Image Preprocess Deadline",
+        "Max preprocess time. Anything above this will raise a timeout.",
+        0, 120, 0,
+        (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
+
+  g_object_class_install_property (gobject_class, PROP_DRAW_RESULTS_ON_FRAME,
+    g_param_spec_boolean ("draw-results", "Draw Results",
+        "Draw boxes and label on current frame",
+        0,
+        (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
   /* Set sink and src pad capabilities */
   gst_element_class_add_pad_template (gstelement_class,
@@ -184,6 +213,10 @@ gst_caffeplugin_init (GstCaffePlugin * caffeplugin)
   caffeplugin->weights_file = g_strdup (DEFAULT_EMPTY_STRING);
   caffeplugin->nms = DEFAULT_NMS_THRE;
   caffeplugin->confidence = DEFAULT_CONFIDENCE_THRE;
+  caffeplugin->skipInterval = 0;
+  caffeplugin->inferLoopLimit = DEFAULT_INFERENCE_BUSY_LOOPS;
+  caffeplugin->preprocessDeadline = DEFAULT_PREPROCESS_IMAGE_DEADLINE;
+  caffeplugin->drawResults = 0;
 }
 
 /* Function called when a property of the element is set. Standard boilerplate.
@@ -221,6 +254,18 @@ gst_caffeplugin_set_property (GObject * object, guint prop_id,
     case PROP_CONFIDENCE_THRESHOLD:
       caffeplugin->confidence = g_value_get_float (value);
       break;
+    case PROP_SKIP_FRAME_INTERVAL:
+      caffeplugin->skipInterval = g_value_get_uint(value);
+      break;
+    case PROP_INFERENCE_BUSY_LOOPS:
+      caffeplugin->inferLoopLimit = g_value_get_uint(value);
+      break;
+    case PROP_PREPROCESS_IMAGE_DEADLINE:
+      caffeplugin->preprocessDeadline = g_value_get_uint(value);
+      break;
+    case PROP_DRAW_RESULTS_ON_FRAME:
+      caffeplugin->drawResults = g_value_get_boolean(value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -255,6 +300,18 @@ gst_caffeplugin_get_property (GObject * object, guint prop_id, GValue * value,
     case PROP_CONFIDENCE_THRESHOLD:
       g_value_set_float (value, caffeplugin->confidence);
       break;
+    case PROP_SKIP_FRAME_INTERVAL:
+      g_value_set_uint(value, caffeplugin->skipInterval);
+      break;
+    case PROP_INFERENCE_BUSY_LOOPS:
+      g_value_set_uint(value, caffeplugin->inferLoopLimit);
+      break;
+    case PROP_PREPROCESS_IMAGE_DEADLINE:
+      g_value_set_uint(value, caffeplugin->preprocessDeadline);
+      break;
+    case PROP_DRAW_RESULTS_ON_FRAME:
+      g_value_set_boolean(value, caffeplugin->drawResults);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -273,7 +330,9 @@ gst_caffeplugin_start (GstBaseTransform * btrans)
     caffeplugin->model_path,
     caffeplugin->weights_file,
     caffeplugin->nms, 
-    caffeplugin->confidence
+    caffeplugin->confidence,
+    caffeplugin->inferLoopLimit,
+    caffeplugin->preprocessDeadline
   };
 
   if ((!caffeplugin->network)
@@ -357,7 +416,20 @@ gst_caffeplugin_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
   GstMapInfo in_map_info;
   GstFlowReturn flow_ret = GST_FLOW_OK;
 
+  GstDetectionMetas *metas = GST_DETECTIONMETAS_ADD(inbuf);
+  metas->detections_count = 0;
+
+  bool doSkipFrames = caffeplugin->skipInterval > 0 ? true : false;
+
   caffeplugin->frame_num++;
+
+  if ((doSkipFrames) && \
+    ((caffeplugin->frame_num % caffeplugin->skipInterval) == 0)) {
+
+    g_info("skipping frame %d due to skip interval[%d] setting\n", \
+      caffeplugin->frame_num, caffeplugin->skipInterval);
+    return flow_ret;
+  }
   // CHECK_CUDA_STATUS (cudaSetDevice (caffeplugin->gpu_id),
   //     "Unable to set cuda device");
 
@@ -391,8 +463,7 @@ gst_caffeplugin_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
     g_warning("Exception encountered: %s\n", e.what());
   }
 
-  GstDetectionMetas *metas = GST_DETECTIONMETAS_ADD(inbuf);
-  metas->detections_count = 0;
+  gchar label_n_confidence[64];
   
   for (auto result: caffeplugin->caffepluginlib_ctx->results[0]) {
     GstObjectDetectionMeta *meta = &metas->detections[metas->detections_count++];
@@ -403,6 +474,15 @@ gst_caffeplugin_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
     meta->ymin = static_cast<guint>(result.box.y1 >= 0 ? result.box.y1 : 0.0);
     meta->xmax = static_cast<guint>(result.box.x2);
     meta->ymax = static_cast<guint>(result.box.y2);
+
+    if (caffeplugin->drawResults) {
+      sprintf(label_n_confidence, "%s (%.3f)", meta->label, meta->confidence);
+
+      cv::rectangle(img, cv::Point(meta->xmin, meta->ymin), \
+        cv::Point(meta->xmax, meta->ymax), cv::Scalar(255, 0, 0), 3);
+      cv::putText(img, label_n_confidence, cv::Point(meta->xmin, meta->ymin), \
+        cv::FONT_HERSHEY_DUPLEX, 1.0, cv::Scalar(0, 255, 0), 2);
+    }
   }
 
   gst_buffer_unmap (inbuf, &in_map_info);

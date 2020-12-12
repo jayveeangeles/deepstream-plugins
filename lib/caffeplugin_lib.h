@@ -42,6 +42,8 @@ typedef struct
   std::string weightsFile;
   float nms;
   float confidence;
+  uint inferLoopLimit;
+  uint preprocessDeadline;
 
 } CaffePluginInitParams;
 

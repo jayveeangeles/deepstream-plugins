@@ -92,6 +92,12 @@ struct _GstCaffePlugin
 
   gfloat nms;
   gfloat confidence;
+
+  guint skipInterval;
+  guint inferLoopLimit;
+  guint preprocessDeadline;
+
+  gboolean drawResults;
 };
 
 // Boiler plate stuff

@@ -100,7 +100,7 @@ private:
   //!
   //! \brief General purpose timer
   //!
-  Stopwatch<std::chrono::milliseconds, std::chrono::steady_clock> inferTimer;
+  Stopwatch<std::chrono::microseconds, std::chrono::steady_clock> inferTimer;
 
   //!
   //! \brief Init Class, set params
@@ -247,7 +247,7 @@ std::array<std::vector<DetectionObject>, TBatchSize> SSD<TBatchSize>::infer(
   inferTimer.start();
   this->processInput(*buffers.get(), images);
   inferTimer.stop();
-  if (inferTimer.elapsed() >= 20) {
+  if (inferTimer.elapsed() >= this->mParams.preprocessDeadline) {
     gLogWarning << "Timeout while pre-processing image" << '\n';
     throw CaffeRuntimeException("Timed out while doing inference");
   }
@@ -260,10 +260,9 @@ std::array<std::vector<DetectionObject>, TBatchSize> SSD<TBatchSize>::infer(
     return {};
 
   const auto streamSyncWithTimeout = [this] () {
-    int counter         = 0;
-    const int loopLimit = 60;
+    uint counter         = 0;
     
-    while (counter++ < loopLimit) {
+    while (counter++ < this->mParams.inferLoopLimit) {
       const cudaError_t err = cudaStreamQuery(stream);
       switch (err)
       {

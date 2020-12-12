@@ -418,7 +418,7 @@ std::array<std::vector<DetectionObject>, TBatchSize> FasterRCNN<TBatchSize>::inf
   inferTimer.start();
   this->processInput(*buffers.get(), images);
   inferTimer.stop();
-  if (inferTimer.elapsed() >= 20000) {
+  if (inferTimer.elapsed() >= this->mParams.preprocessDeadline) {
     gLogWarning << "Timeout while pre-processing image" << '\n';
     throw CaffeRuntimeException("Timed out while doing inference");
   }
@@ -432,10 +432,9 @@ std::array<std::vector<DetectionObject>, TBatchSize> FasterRCNN<TBatchSize>::inf
     return {};
 
   const auto streamSyncWithTimeout = [this] () {
-    int counter         = 0;
-    const int loopLimit = 60;
+    uint counter         = 0;
     
-    while (counter++ < loopLimit) {
+    while (counter++ < this->mParams.inferLoopLimit) {
       const cudaError_t err = cudaStreamQuery(stream);
       switch (err) {
         case cudaSuccess: 

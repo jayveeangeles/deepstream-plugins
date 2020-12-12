@@ -41,27 +41,29 @@ CaffePluginCtx* CaffePluginCtxInit(CaffePluginInitParams* initParams)
   cudaGetDeviceProperties(&prop, 0);
 
   initLibNvInferPlugins(&gLogger, "");
-
-  // ctx->testAtom = gLogger.defineTest("TensorRT", 0, {});
-  // gLogger.reportTestStart(ctx->testAtom);
-
   setReportableSeverity(Logger::Severity::kINFO);
 
   if (ctx->initParams.network == "FRCNN") {
     trt::FasterRCNNParams params;
 
-    initializeParams(params, prop, ctx->initParams.modelPath, ctx->initParams.weightsFile);
+    initializeParams(params, prop, \
+      ctx->initParams.modelPath, ctx->initParams.weightsFile);
 
-    params.confThre = ctx->initParams.confidence;
-    params.nmsThre  = ctx->initParams.nms;
+    params.confThre           = ctx->initParams.confidence;
+    params.nmsThre            = ctx->initParams.nms;
+    params.inferLoopLimit     = ctx->initParams.inferLoopLimit;
+    params.preprocessDeadline = ctx->initParams.preprocessDeadline;
     
     ctx->inferenceNetwork = new trt::FasterRCNN<BATCH_SIZE>(params);
   } else if (ctx->initParams.network == "SSD") {
     trt::SSDParams params;
 
-    initializeParams(params, prop, ctx->initParams.modelPath, ctx->initParams.weightsFile);
+    initializeParams(params, prop, \
+      ctx->initParams.modelPath, ctx->initParams.weightsFile);
 
-    params.confThre = ctx->initParams.confidence;
+    params.confThre           = ctx->initParams.confidence;
+    params.inferLoopLimit     = ctx->initParams.inferLoopLimit;
+    params.preprocessDeadline = ctx->initParams.preprocessDeadline;
 
     ctx->inferenceNetwork = new trt::SSD<BATCH_SIZE>(params);
   } else {
@@ -81,8 +83,6 @@ CaffePluginCtx* CaffePluginCtxInit(CaffePluginInitParams* initParams)
 }
 
 void CaffePluginCtxDeinit(CaffePluginCtx* ctx) {
-  // gLogger.reportPass(ctx->testAtom);
-
   if (ctx->inferenceNetwork) {
     delete ctx->inferenceNetwork;
     ctx->inferenceNetwork = nullptr;
