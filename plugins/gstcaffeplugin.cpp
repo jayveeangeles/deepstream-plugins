@@ -470,7 +470,7 @@ gst_caffeplugin_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
   auto elapsed_time = caffeplugin->infer_timer.stop();
   caffeplugin->infer_time += elapsed_time;
   
-  GST_INFO_OBJECT (caffeplugin,
+  GST_DEBUG_OBJECT (caffeplugin,
     "Inference time: %.2fus", elapsed_time);
 
   gchar label_n_confidence[64];
