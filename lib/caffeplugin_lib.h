@@ -56,6 +56,7 @@ struct CaffePluginCtx
 
   // perf vars
   uint64_t imageCount = 0;
+  double inferTime = 0.0;
 };
 
 // Initialize library context

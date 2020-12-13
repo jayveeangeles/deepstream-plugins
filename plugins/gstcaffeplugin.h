@@ -98,6 +98,9 @@ struct _GstCaffePlugin
   guint preprocess_deadline;
 
   gboolean draw_results;
+
+  trt::Stopwatch<std::chrono::microseconds, std::chrono::steady_clock> infer_timer;
+  double infer_time = 0.0;
 };
 
 // Boiler plate stuff

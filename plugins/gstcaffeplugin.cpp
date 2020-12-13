@@ -62,7 +62,7 @@ enum
 
 #define CHECK_CUDA_STATUS(cuda_status,error_str) do { \
   if ((cuda_status) != cudaSuccess) { \
-    g_error ("Error: %s in %s at line %d (%s)\n", \
+    GST_ERROR_OBJECT (caffeplugin, "Error: %s in %s at line %d (%s)\n", \
         error_str, __FILE__, __LINE__, cudaGetErrorName(cuda_status)); \
     goto error; \
   } \
@@ -337,19 +337,19 @@ gst_caffeplugin_start (GstBaseTransform * btrans)
 
   if ((!caffeplugin->network)
       || (strlen (caffeplugin->network) == 0)) {
-    g_error ("ERROR: network type not set \n");
+    GST_ERROR_OBJECT (caffeplugin, "ERROR: network type not set ");
     goto error;
   }
 
   if ((!caffeplugin->model_path)
       || (strlen (caffeplugin->model_path) == 0)) {
-    g_error ("ERROR: model path not set \n");
+    GST_ERROR_OBJECT (caffeplugin, "ERROR: model path not set ");
     goto error;
   }
 
   if ((!caffeplugin->weights_file)
       || (strlen (caffeplugin->weights_file) == 0)) {
-    g_error ("ERROR: weights file not set \n");
+    GST_ERROR_OBJECT (caffeplugin, "ERROR: weights file not set ");
     goto error;
   }
 
@@ -357,8 +357,8 @@ gst_caffeplugin_start (GstBaseTransform * btrans)
   caffeplugin->caffepluginlib_ctx = CaffePluginCtxInit (&init_params);
 
   g_assert (caffeplugin->caffepluginlib_ctx
-      && "Unable to create caffe plugin lib ctx \n ");
-  GST_DEBUG_OBJECT (caffeplugin, "ctx lib %p \n", caffeplugin->caffepluginlib_ctx);
+      && "Unable to create caffe plugin lib ctx  ");
+  GST_DEBUG_OBJECT (caffeplugin, "ctx lib %p ", caffeplugin->caffepluginlib_ctx);
 
   // CHECK_CUDA_STATUS (cudaSetDevice (caffeplugin->gpu_id),
   //     "Unable to set cuda device");
@@ -377,10 +377,13 @@ static gboolean
 gst_caffeplugin_stop (GstBaseTransform * btrans)
 {
   GstCaffePlugin *caffeplugin = GST_CAFFEPLUGIN (btrans);
+  
+  GST_INFO_OBJECT (caffeplugin,
+    "Inference time (average): %.2fus", \
+    caffeplugin->infer_time / caffeplugin->frame_num);
 
-  g_info("stopping caffe\n");
   CaffePluginCtxDeinit (caffeplugin->caffepluginlib_ctx);
-  GST_DEBUG_OBJECT (caffeplugin, "ctx lib released \n");
+  GST_INFO_OBJECT (caffeplugin, "ctx lib released ");
 
   return TRUE;
 }
@@ -401,9 +404,6 @@ gst_caffeplugin_set_caps (GstBaseTransform * btrans, GstCaps * incaps,
   //     "Unable to set cuda device");
 
   return TRUE;
-
-error:
-  return FALSE;
 }
 
 /**
@@ -426,7 +426,8 @@ gst_caffeplugin_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
   if ((doSkipFrames) && \
     ((caffeplugin->frame_num % caffeplugin->skip_interval) == 0)) {
 
-    g_info("skipping frame %d due to skip interval[%d] setting\n", \
+    GST_INFO_OBJECT (caffeplugin,
+      "skipping frame %d; skip interval=%d", \
       caffeplugin->frame_num, caffeplugin->skip_interval);
     return flow_ret;
   }
@@ -435,7 +436,7 @@ gst_caffeplugin_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
 
   memset (&in_map_info, 0, sizeof (in_map_info));
   if (!gst_buffer_map (inbuf, &in_map_info, GST_MAP_READ)) {
-    g_error ("Error: Failed to map gst buffer\n");
+    GST_ERROR_OBJECT (caffeplugin, "Error: Failed to map gst buffer");
     return GST_FLOW_ERROR;
   }
 
@@ -443,10 +444,10 @@ gst_caffeplugin_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
     caffeplugin->video_info.height *
     caffeplugin->video_info.width * 3
   )
-      && "Unable to create caffe plugin lib ctx \n ");
+      && "Unable to create caffe plugin lib ctx  ");
 
   GST_DEBUG_OBJECT (caffeplugin,
-      "Processing Frame %" G_GUINT64_FORMAT "\n",
+      "Processing Frame %" G_GUINT64_FORMAT "",
       caffeplugin->frame_num);
       
   cv::Mat img (
@@ -456,12 +457,21 @@ gst_caffeplugin_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
 
   // hack for now
   caffeplugin->caffepluginlib_ctx->images[0] = img;
+  
+  caffeplugin->infer_timer.start();
   try {
     caffeplugin->caffepluginlib_ctx->results = \
-      caffeplugin->caffepluginlib_ctx->inferenceNetwork->infer(caffeplugin->caffepluginlib_ctx->images);
+      caffeplugin->caffepluginlib_ctx->inferenceNetwork->infer(
+          caffeplugin->caffepluginlib_ctx->images);
   } catch  (const trt::CaffeRuntimeException& e) {
-    g_warning("Exception encountered: %s\n", e.what());
+    g_warning("Exception encountered: %s", e.what());
   }
+
+  auto elapsed_time = caffeplugin->infer_timer.stop();
+  caffeplugin->infer_time += elapsed_time;
+  
+  GST_INFO_OBJECT (caffeplugin,
+    "Inference time: %.2fus", elapsed_time);
 
   gchar label_n_confidence[64];
   

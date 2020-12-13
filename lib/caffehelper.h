@@ -15,16 +15,6 @@
 #define BATCH_SIZE  1
 #endif
 
-// //!
-// //! \brief Collection of Timers
-// //!
-// struct Timers {
-//   trt::Stopwatch<std::chrono::microseconds, std::chrono::steady_clock> detectNTrackLoopTime;
-//   trt::Stopwatch<std::chrono::microseconds, std::chrono::steady_clock> featureTime;
-//   trt::Stopwatch<std::chrono::microseconds, std::chrono::steady_clock> detectTime;
-//   trt::Stopwatch<std::chrono::microseconds, std::chrono::steady_clock> dequeueTime;
-// };
-
 //!
 //! \brief Hack to Parse Prototxt file
 //!
