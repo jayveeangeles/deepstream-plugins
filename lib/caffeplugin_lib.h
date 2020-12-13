@@ -53,10 +53,6 @@ struct CaffePluginCtx
   trt::Caffe<BATCH_SIZE>* inferenceNetwork;
   std::array<cv::Mat, BATCH_SIZE> images;
   std::array<std::vector<trt::DetectionObject>, BATCH_SIZE> results;
-
-  // perf vars
-  uint64_t imageCount = 0;
-  double inferTime = 0.0;
 };
 
 // Initialize library context
