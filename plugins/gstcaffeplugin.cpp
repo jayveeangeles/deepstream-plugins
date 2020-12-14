@@ -168,13 +168,13 @@ gst_caffeplugin_class_init (GstCaffePluginClass * klass)
   g_object_class_install_property (gobject_class, PROP_INFERENCE_BUSY_LOOPS,
     g_param_spec_uint ("infer-loops", "Inference Loops",
         "Number of 500us loops to sleep before timing out during inference.",
-        0, 120, 60,
+        0, 240, DEFAULT_INFERENCE_BUSY_LOOPS,
         (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
   g_object_class_install_property (gobject_class, PROP_PREPROCESS_IMAGE_DEADLINE,
     g_param_spec_uint ("preprocess-deadline", "Image Preprocess Deadline",
         "Max preprocess time. Anything above this will raise a timeout.",
-        0, 120, 0,
+        0, 100000, DEFAULT_PREPROCESS_IMAGE_DEADLINE,
         (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
 
   g_object_class_install_property (gobject_class, PROP_DRAW_RESULTS_ON_FRAME,
