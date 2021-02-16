@@ -1,7 +1,7 @@
 /**
 MIT License
 
-Copyright (c) 2018 NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2019-2020, NVIDIA CORPORATION. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -56,12 +56,15 @@ Yolo::Yolo(const uint batchSize, const NetworkInfo& networkInfo, const InferPara
     m_Context(nullptr),
     m_InputBindingIndex(-1),
     m_CudaStream(nullptr),
-    m_PluginFactory(new PluginFactory),
+    m_InputReadyEvent(nullptr),
+    // m_PluginFactory(new PluginFactory),
     m_TinyMaxpoolPaddingFormula(new YoloTinyMaxpoolPaddingFormula)
 {
     m_ClassNames = loadListFromTextFile(m_LabelsFilePath);
     m_configBlocks = parseConfigFile(m_ConfigFilePath);
     parseConfigBlocks();
+
+    initLibNvInferPlugins(&m_Logger, "");
 
     if (m_Precision == "kFLOAT")
     {
@@ -83,8 +86,9 @@ Yolo::Yolo(const uint batchSize, const NetworkInfo& networkInfo, const InferPara
         std::cout << "Unrecognized precision type " << m_Precision << std::endl;
         assert(0);
     }
-    assert(m_PluginFactory != nullptr);
-    m_Engine = loadTRTEngine(m_EnginePath, m_PluginFactory, m_Logger);
+    // assert(m_PluginFactory != nullptr);
+    // m_Engine = loadTRTEngine(m_EnginePath, m_PluginFactory, m_Logger);
+    m_Engine = loadTRTEngine(m_EnginePath, m_Logger);
     assert(m_Engine != nullptr);
     m_Context = m_Engine->createExecutionContext();
     assert(m_Context != nullptr);
@@ -92,7 +96,8 @@ Yolo::Yolo(const uint batchSize, const NetworkInfo& networkInfo, const InferPara
     assert(m_InputBindingIndex != -1);
     assert(m_BatchSize <= static_cast<uint>(m_Engine->getMaxBatchSize()));
     allocateBuffers();
-    NV_CUDA_CHECK(cudaStreamCreate(&m_CudaStream));
+    NV_CUDA_CHECK(cudaStreamCreateWithFlags(&m_CudaStream, cudaStreamNonBlocking));
+    NV_CUDA_CHECK(cudaEventCreate(&m_InputReadyEvent));
     assert(verifyYoloEngine());
 };
 
@@ -113,11 +118,11 @@ Yolo::~Yolo()
         m_Engine = nullptr;
     }
 
-    if (m_PluginFactory)
-    {
-        m_PluginFactory->destroy();
-        m_PluginFactory = nullptr;
-    }
+    // if (m_PluginFactory)
+    // {
+    //     m_PluginFactory->destroy();
+    //     m_PluginFactory = nullptr;
+    // }
 
     m_TinyMaxpoolPaddingFormula.reset();
 }
@@ -240,12 +245,12 @@ void Yolo::createYOLOEngine(const nvinfer1::DataType dataType, Int8EntropyCalibr
                 * (curYoloTensor.numBBoxes * (5 + curYoloTensor.numClasses));
             std::string layerName = "yolo_" + std::to_string(i);
             curYoloTensor.blobName = layerName;
-            nvinfer1::IPlugin* yoloPlugin
+            nvinfer1::IPluginV2* yoloPlugin
                 = new YoloLayerV3(m_OutputTensors.at(outputTensorCount).numBBoxes,
                                   m_OutputTensors.at(outputTensorCount).numClasses,
                                   m_OutputTensors.at(outputTensorCount).gridSize);
             assert(yoloPlugin != nullptr);
-            nvinfer1::IPluginLayer* yolo = m_Network->addPlugin(&previous, 1, *yoloPlugin);
+            nvinfer1::IPluginV2Layer* yolo = m_Network->addPluginV2(&previous, 1, *yoloPlugin);
             assert(yolo != nullptr);
             yolo->setName(layerName.c_str());
             std::string inputVol = dimsToString(previous->getDimensions());
@@ -275,10 +280,11 @@ void Yolo::createYOLOEngine(const nvinfer1::DataType dataType, Int8EntropyCalibr
                 static_cast<int>(curRegionTensor.numBBoxes), 4,
                 static_cast<int>(curRegionTensor.numClasses), nullptr};
             std::string inputVol = dimsToString(previous->getDimensions());
-            nvinfer1::IPlugin* regionPlugin
-                = nvinfer1::plugin::createYOLORegionPlugin(RegionParameters);
+            nvinfer1::IPluginV2* regionPlugin
+                = createRegionPlugin(RegionParameters);
             assert(regionPlugin != nullptr);
-            nvinfer1::IPluginLayer* region = m_Network->addPlugin(&previous, 1, *regionPlugin);
+            nvinfer1::IPluginV2Layer* region =
+                m_Network->addPluginV2(&previous, 1, *regionPlugin);
             assert(region != nullptr);
             region->setName(layerName.c_str());
             previous = region->getOutput(0);
@@ -297,9 +303,9 @@ void Yolo::createYOLOEngine(const nvinfer1::DataType dataType, Int8EntropyCalibr
         else if (m_configBlocks.at(i).at("type") == "reorg")
         {
             std::string inputVol = dimsToString(previous->getDimensions());
-            nvinfer1::IPlugin* reorgPlugin = nvinfer1::plugin::createYOLOReorgPlugin(2);
+            nvinfer1::IPluginV2* reorgPlugin = createReorgPlugin(2);
             assert(reorgPlugin != nullptr);
-            nvinfer1::IPluginLayer* reorg = m_Network->addPlugin(&previous, 1, *reorgPlugin);
+            nvinfer1::IPluginV2Layer* reorg = m_Network->addPluginV2(&previous, 1, *reorgPlugin);
             assert(reorg != nullptr);
 
             std::string layerName = "reorg_" + std::to_string(i);
@@ -467,12 +473,43 @@ void Yolo::createYOLOEngine(const nvinfer1::DataType dataType, Int8EntropyCalibr
 
 void Yolo::doInference(const unsigned char* input, const uint batchSize)
 {
+    // using namespace std::chrono_literals;
+
     assert(batchSize <= m_BatchSize && "Image batch size exceeds TRT engines batch size");
+    cudaEventSynchronize(m_InputReadyEvent);
+
     NV_CUDA_CHECK(cudaMemcpyAsync(m_DeviceBuffers.at(m_InputBindingIndex), input,
                                   batchSize * m_InputSize * sizeof(float), cudaMemcpyHostToDevice,
                                   m_CudaStream));
 
-    m_Context->enqueue(batchSize, m_DeviceBuffers.data(), m_CudaStream, nullptr);
+    m_Context->enqueue(batchSize, m_DeviceBuffers.data(), m_CudaStream, &m_InputReadyEvent);
+
+    const auto streamSyncWithTimeout = [this] () {
+        uint counter = 0;
+    
+        // while (counter++ < this->mParams.inferLoopLimit) {
+        while (counter++ < 60) { // 30s
+            const cudaError_t err = cudaStreamQuery(m_CudaStream);
+            switch (err) {
+                case cudaSuccess: 
+                return true;           // now we are synchronized
+                case cudaErrorNotReady: 
+                std::this_thread::sleep_for(std::chrono::microseconds(500));
+                break;                  // continue waiting
+                default: NV_CUDA_CHECK(err);      // unexpected error: throw
+            }
+        }
+
+        std::cout << "Timeout while enqueueing inference job" << '\n';
+        return false;
+    };
+  
+    const auto enqueueResult = streamSyncWithTimeout();
+
+    if (!enqueueResult) {
+        std::cerr << "Timed out while doing inference" << '\n';
+        return;
+    }
 
     for (auto& tensor : m_OutputTensors)
     {
@@ -628,7 +665,7 @@ void Yolo::allocateBuffers()
         NV_CUDA_CHECK(cudaMalloc(&m_DeviceBuffers.at(tensor.bindingIndex),
                                  m_BatchSize * tensor.volume * sizeof(float)));
         NV_CUDA_CHECK(
-            cudaMallocHost(&tensor.hostBuffer, tensor.volume * m_BatchSize * sizeof(float)));
+            cudaMallocHost(reinterpret_cast<void **>(&tensor.hostBuffer), tensor.volume * m_BatchSize * sizeof(float)));
     }
 }
 

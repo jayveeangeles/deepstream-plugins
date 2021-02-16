@@ -1,7 +1,7 @@
 /**
 MIT License
 
-Copyright (c) 2018 NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2019-2020, NVIDIA CORPORATION. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -35,6 +35,8 @@ SOFTWARE.
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <chrono>
+#include <thread>
 
 /**
  * Holds all the file paths required to build a network.
@@ -142,7 +144,8 @@ protected:
     std::vector<void*> m_DeviceBuffers;
     int m_InputBindingIndex;
     cudaStream_t m_CudaStream;
-    PluginFactory* m_PluginFactory;
+    cudaEvent_t m_InputReadyEvent;
+    // PluginFactory* m_PluginFactory;
     std::unique_ptr<YoloTinyMaxpoolPaddingFormula> m_TinyMaxpoolPaddingFormula;
 
     virtual std::vector<BBoxInfo> decodeTensor(const int imageIdx, const int imageH,

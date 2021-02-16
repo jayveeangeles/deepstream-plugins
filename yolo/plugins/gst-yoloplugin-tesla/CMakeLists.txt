@@ -26,13 +26,14 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 project(yolo-plugin-tesla LANGUAGES CXX)
 
-set(CMAKE_CXX_FLAGS "-fPIC -std=c++11 -Wall -Wunused-function -Wunused-variable -Wfatal-errors")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -std=c++11 -Wall -Wunused-function -Wunused-variable -Wfatal-errors")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -ggdb")
 set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
 set(CMAKE_SHARED_LINKER_FLAGS "-Wl,--no-undefined")
 
-set(DS_SDK_ROOT "" CACHE PATH "NVIDIA Deepstream SDK root path")
+EXECUTE_PROCESS(COMMAND uname -m COMMAND tr -d '\n' OUTPUT_VARIABLE ARCHITECTURE)
+
 set(TRT_SDK_ROOT "" CACHE PATH "NVIDIA TensorRT SDK root path")
 set(OPENCV_ROOT "" CACHE PATH "OpenCV SDK root path")
 
@@ -41,8 +42,10 @@ find_package(PkgConfig)
 pkg_check_modules(GST REQUIRED gstreamer-1.0>=1.8 gstreamer-video-1.0>=1.8 gstreamer-base-1.0>=1.8)
 
 
-find_package(CUDA 10.0 EXACT REQUIRED cudart cublas curand)
+find_package(CUDA REQUIRED cudart cublas curand)
 list(APPEND GPU_ARCHS 30 35 37 50 52 60 61 70 75)
+
+MESSAGE("found CUDA Version:${CUDA_VERSION}")
 
 # Generate SASS for each architecture
 foreach(arch ${GPU_ARCHS})
@@ -66,24 +69,21 @@ else()
   MESSAGE(STATUS "Found TensorRT headers at ${TRT_INCLUDE_DIR}")
 endif()
 
-find_library(TRT_LIBRARY_INFER nvinfer HINTS ${TRT_SDK_ROOT} PATH_SUFFIXES lib lib64 lib/x64)
-find_library(TRT_LIBRARY_INFER_PLUGIN nvinfer_plugin HINTS ${TRT_SDK_ROOT} PATH_SUFFIXES lib lib64 lib/x64)
-if((${TRT_LIBRARY_INFER} MATCHES "TRT_LIBRARY_INFER-NOTFOUND") OR (${TRT_LIBRARY_INFER_PLUGIN} MATCHES "TRT_LIBRARY_INFER_PLUGIN-NOTFOUND"))
-  MESSAGE(FATAL_ERROR "-- Unable to find TensorRT libs. Please set path using -DTRT_SDK_ROOT")
-else()
-  set(TRT_LIBRARY ${TRT_LIBRARY_INFER} ${TRT_LIBRARY_INFER_PLUGIN})
-  MESSAGE(STATUS "Found TensorRT libs at ${TRT_LIBRARY}")
-endif()
+find_library(NVINFER_LIBRARY nvinfer HINTS ${TRT_SDK_ROOT}/../lib)
+find_library(NVPARSERS_LIBRARY nvparsers HINTS ${TRT_SDK_ROOT}/../lib)
+find_library(NVONNXPARSER_LIBRARY nvonnxparser HINTS ${TRT_SDK_ROOT}/../lib)
+find_library(NVINFERPLUGIN_LIBRARY nvinfer_plugin HINTS ${TRT_SDK_ROOT}/../lib)
 
 # Add yolo lib as subdir
 add_subdirectory(${PROJECT_SOURCE_DIR}/../../lib ${PROJECT_BINARY_DIR}/lib)
 
-include_directories(${CUDA_INCLUDE_DIRS} ${TRT_INCLUDE_DIR} ${GST_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/../../lib ${DS_SDK_ROOT}/sources/includes)
-link_directories(${CUDA_TOOLKIT_ROOT_DIR}/lib64 ${GST_LIBRARY_DIRS} /usr/local/deepstream)
+include_directories(${CUDA_INCLUDE_DIRS} ${TRT_INCLUDE_DIR} ${GST_INCLUDE_DIRS} ${PROJECT_SOURCE_DIR}/../../lib)
+link_directories(${CUDA_TOOLKIT_ROOT_DIR}/lib64 ${GST_LIBRARY_DIRS})
+link_directories(${TRT_SDK_ROOT}/../lib)
 
-add_library(gstnvyolo SHARED gstyoloplugin.cpp)
-set_target_properties(gstnvyolo PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
-target_link_libraries(gstnvyolo yolo-lib nvdsgst_helper nvdsgst_meta nppc nppig npps ${GST_LIBRARIES})
+add_library(gstyoloplugin SHARED gstyoloplugin.cpp)
+set_target_properties(gstyoloplugin PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+target_link_libraries(gstyoloplugin yololib gst_detectionmetas ${GST_LIBRARIES} nvinfer_plugin nvinfer nvparsers)
 
 #Install library
-install(TARGETS gstnvyolo LIBRARY DESTINATION "/usr/lib/x86_64-linux-gnu/gstreamer-1.0/" CONFIGURATIONS Release Debug)
+install(TARGETS gstyoloplugin LIBRARY DESTINATION "/usr/lib/${ARCHITECTURE}-linux-gnu/gstreamer-1.0/" CONFIGURATIONS Release Debug)

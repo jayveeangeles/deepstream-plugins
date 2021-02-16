@@ -1,7 +1,7 @@
 /**
 MIT License
 
-Copyright (c) 2018 NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2019-2020, NVIDIA CORPORATION. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -224,8 +224,9 @@ std::vector<BBoxInfo> nonMaximumSuppression(const float nmsThresh, std::vector<B
     return out;
 }
 
-nvinfer1::ICudaEngine* loadTRTEngine(const std::string planFilePath, PluginFactory* pluginFactory,
-                                     Logger& logger)
+// nvinfer1::ICudaEngine* loadTRTEngine(const std::string planFilePath, PluginFactory* pluginFactory,
+//                                      Logger& logger)
+nvinfer1::ICudaEngine* loadTRTEngine(const std::string planFilePath,  Logger& logger)
 {
     // reading the model in memory
     std::cout << "Loading TRT Engine..." << std::endl;
@@ -246,7 +247,7 @@ nvinfer1::ICudaEngine* loadTRTEngine(const std::string planFilePath, PluginFacto
 
     nvinfer1::IRuntime* runtime = nvinfer1::createInferRuntime(logger);
     nvinfer1::ICudaEngine* engine
-        = runtime->deserializeCudaEngine(modelMem, modelSize, pluginFactory);
+        = runtime->deserializeCudaEngine(modelMem, modelSize, nullptr);
     free(modelMem);
     runtime->destroy();
     std::cout << "Loading Complete!" << std::endl;
@@ -542,10 +543,10 @@ nvinfer1::ILayer* netAddConvBNLeaky(int layerIdx, std::map<std::string, std::str
     bn->setName(bnLayerName.c_str());
     /***** ACTIVATION LAYER *****/
     /****************************/
-    nvinfer1::IPlugin* leakyRELU = nvinfer1::plugin::createPReLUPlugin(0.1);
-    assert(leakyRELU != nullptr);
     nvinfer1::ITensor* bnOutput = bn->getOutput(0);
-    nvinfer1::IPluginLayer* leaky = network->addPlugin(&bnOutput, 1, *leakyRELU);
+    nvinfer1::IActivationLayer* leaky = network->addActivation(
+        *bnOutput, nvinfer1::ActivationType::kLEAKY_RELU);
+    leaky->setAlpha(0.1);
     assert(leaky != nullptr);
     std::string leakyLayerName = "leaky_" + std::to_string(layerIdx);
     leaky->setName(leakyLayerName.c_str());

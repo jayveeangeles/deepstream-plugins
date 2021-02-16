@@ -45,8 +45,6 @@ typedef struct
     int processingWidth;
     // height at which frame/object will be scaled
     int processingHeight;
-    // Flag to indicate whether operating on crops of full frame
-    int fullFrame;
     // Plugin config file
     std::string configFilePath;
 } YoloPluginInitParams;

@@ -31,9 +31,14 @@ find_package(PkgConfig)
 pkg_check_modules(GLIB REQUIRED glib-2.0)
 
 include_directories(${CUDA_INCLUDE_DIRS} ${OpenCV_INCLUDE_DIRS} ${TRT_INCLUDE_DIR} ${GLIB_INCLUDE_DIRS} ${GLFAGS_INCLUDE_DIRS} )
+link_directories(${TRT_SDK_ROOT}/../lib)
 link_directories(${CUDA_TOOLKIT_ROOT_DIR}/lib64)
 
 CUDA_COMPILE(CU_OBJS ${CU_SRCS})
-add_library(yolo-lib STATIC ${CXX_SRCS} ${CU_OBJS})
+add_library(yololib SHARED ${CXX_SRCS} ${CU_OBJS})
 
-target_link_libraries(yolo-lib cudart cudnn cublas ${OpenCV_LIBRARIES} ${TRT_LIBRARY_INFER} ${TRT_LIBRARY_INFER_PLUGIN} gflags stdc++fs dl)
+set_target_properties(yololib PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
+target_link_libraries(yololib cudart cudnn cublas ${OpenCV_LIBRARIES} nvinfer nvinfer_plugin nvparsers cudart glog gflags stdc++fs dl)
+
+target_link_libraries(yololib cudart cudnn cublas ${OpenCV_LIBRARIES} ${TRT_LIBRARY_INFER} ${TRT_LIBRARY_INFER_PLUGIN} gflags stdc++fs dl)
+install(TARGETS yololib LIBRARY DESTINATION "/usr/local/lib" CONFIGURATIONS Release Debug)

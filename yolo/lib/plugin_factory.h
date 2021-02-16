@@ -1,7 +1,7 @@
 /**
 MIT License
 
-Copyright (c) 2018 NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -25,16 +25,15 @@ SOFTWARE.
 
 #ifndef __PLUGIN_LAYER_H__
 #define __PLUGIN_LAYER_H__
-
 #include <cassert>
 #include <cstring>
-#include <cudnn.h>
+#include <cuda_runtime_api.h>
 #include <iostream>
 #include <memory>
 
 #include "NvInferPlugin.h"
 
-#define NV_CUDA_CHECK(status)                                                                      \
+#define CHECK(status)                                                                              \
     {                                                                                              \
         if (status != 0)                                                                           \
         {                                                                                          \
@@ -44,99 +43,96 @@ SOFTWARE.
         }                                                                                          \
     }
 
-// Forward declaration of cuda kernels
-cudaError_t cudaYoloLayerV3(const void* input, void* output, const uint& batchSize,
-                            const uint& gridSize, const uint& numOutputClasses,
-                            const uint& numBBoxes, uint64_t outputSize, cudaStream_t stream);
-
-class PluginFactory : public nvinfer1::IPluginFactory
+namespace
 {
+const char* YOLOV3LAYER_PLUGIN_VERSION {"1"};
+const char* YOLOV3LAYER_PLUGIN_NAME {"YoloLayerV3_TRT"};
+} // namespace
 
+class YoloLayerV3 : public nvinfer1::IPluginV2
+{
 public:
-    PluginFactory();
-    nvinfer1::IPlugin* createPlugin(const char* layerName, const void* serialData,
-                                    size_t serialLength) override;
-    bool isPlugin(const char* name);
-    void destroy();
+    YoloLayerV3 (const void* data, size_t length);
+    YoloLayerV3 (const uint& numBoxes, const uint& numClasses, const uint& gridSize);
+    const char* getPluginType () const override { return YOLOV3LAYER_PLUGIN_NAME; }
+    const char* getPluginVersion () const override { return YOLOV3LAYER_PLUGIN_VERSION; }
+    int getNbOutputs () const override { return 1; }
+
+    nvinfer1::Dims getOutputDimensions (
+        int index, const nvinfer1::Dims* inputs,
+        int nbInputDims) override;
+
+    bool supportsFormat (
+        nvinfer1::DataType type, nvinfer1::PluginFormat format) const override;
+
+    void configureWithFormat (
+        const nvinfer1::Dims* inputDims, int nbInputs,
+        const nvinfer1::Dims* outputDims, int nbOutputs,
+        nvinfer1::DataType type, nvinfer1::PluginFormat format, int maxBatchSize) override;
+
+    int initialize () override { return 0; }
+    void terminate () override {}
+    size_t getWorkspaceSize (int maxBatchSize) const override { return 0; }
+    int enqueue (
+        int batchSize, const void* const* inputs, void** outputs,
+        void* workspace, cudaStream_t stream) override;
+    size_t getSerializationSize() const override;
+    void serialize (void* buffer) const override;
+    void destroy () override { delete this; }
+    nvinfer1::IPluginV2* clone() const override;
+
+    void setPluginNamespace (const char* pluginNamespace)override {
+        m_Namespace = pluginNamespace;
+    }
+    virtual const char* getPluginNamespace () const override {
+        return m_Namespace.c_str();
+    }
 
 private:
-    static const int m_MaxLeakyLayers = 72;
-    static const int m_ReorgStride = 2;
-    static constexpr float m_LeakyNegSlope = 0.1;
-    static const int m_NumBoxes = 5;
-    static const int m_NumCoords = 4;
-    static const int m_NumClasses = 80;
-    static const int m_MaxYoloLayers = 3;
-    int m_LeakyReLUCount = 0;
-    int m_YoloLayerCount = 0;
-    nvinfer1::plugin::RegionParameters m_RegionParameters{m_NumBoxes, m_NumCoords, m_NumClasses,
-                                                          nullptr};
-
-    struct INvPluginDeleter
-    {
-        void operator()(nvinfer1::plugin::INvPlugin* ptr)
-        {
-            if (ptr)
-            {
-                ptr->destroy();
-            }
-        }
-    };
-    struct IPluginDeleter
-    {
-        void operator()(nvinfer1::IPlugin* ptr)
-        {
-            if (ptr)
-            {
-                ptr->terminate();
-            }
-        }
-    };
-    typedef std::unique_ptr<nvinfer1::plugin::INvPlugin, INvPluginDeleter> unique_ptr_INvPlugin;
-    typedef std::unique_ptr<nvinfer1::IPlugin, IPluginDeleter> unique_ptr_IPlugin;
-
-    unique_ptr_INvPlugin m_ReorgLayer;
-    unique_ptr_INvPlugin m_RegionLayer;
-    unique_ptr_INvPlugin m_LeakyReLULayers[m_MaxLeakyLayers];
-    unique_ptr_IPlugin m_YoloLayers[m_MaxYoloLayers];
+    uint m_NumBoxes {0};
+    uint m_NumClasses {0};
+    uint m_GridSize {0};
+    uint64_t m_OutputSize {0};
+    std::string m_Namespace {""};
 };
 
-class YoloLayerV3 : public nvinfer1::IPlugin
+class YoloLayerV3PluginCreator : public nvinfer1::IPluginCreator
 {
 public:
-    YoloLayerV3(const void* data, size_t length);
-    YoloLayerV3(const uint& numBoxes, const uint& numClasses, const uint& gridSize);
-    int getNbOutputs() const override;
-    nvinfer1::Dims getOutputDimensions(int index, const nvinfer1::Dims* inputs,
-                                       int nbInputDims) override;
-    void configure(const nvinfer1::Dims* inputDims, int nbInputs, const nvinfer1::Dims* outputDims,
-                   int nbOutputs, int maxBatchSize) override;
-    int initialize() override;
-    void terminate() override;
-    size_t getWorkspaceSize(int maxBatchSize) const override;
-    int enqueue(int batchSize, const void* const* intputs, void** outputs, void* workspace,
-                cudaStream_t stream) override;
-    size_t getSerializationSize() override;
-    void serialize(void* buffer) override;
+    YoloLayerV3PluginCreator () {}
+    ~YoloLayerV3PluginCreator () {}
+
+    const char* getPluginName () const override { return YOLOV3LAYER_PLUGIN_NAME; }
+    const char* getPluginVersion () const override { return YOLOV3LAYER_PLUGIN_VERSION; }
+
+    const nvinfer1::PluginFieldCollection* getFieldNames() override {
+        std::cerr<< "YoloLayerV3PluginCreator::getFieldNames is not implemented" << std::endl;
+        return nullptr;
+    }
+
+    nvinfer1::IPluginV2* createPlugin (
+        const char* name, const nvinfer1::PluginFieldCollection* fc) override
+    {
+        std::cerr<< "YoloLayerV3PluginCreator::getFieldNames is not implemented.\n";
+        return nullptr;
+    }
+
+    nvinfer1::IPluginV2* deserializePlugin (
+        const char* name, const void* serialData, size_t serialLength) override
+    {
+        std::cout << "Deserialize yoloLayerV3 plugin: " << name << std::endl;
+        return new YoloLayerV3(serialData, serialLength);
+    }
+
+    void setPluginNamespace(const char* libNamespace) override {
+        m_Namespace = libNamespace;
+    }
+    const char* getPluginNamespace() const override {
+        return m_Namespace.c_str();
+    }
 
 private:
-    template <typename T>
-    void write(char*& buffer, const T& val)
-    {
-        *reinterpret_cast<T*>(buffer) = val;
-        buffer += sizeof(T);
-    }
-
-    template <typename T>
-    void read(const char*& buffer, T& val)
-    {
-        val = *reinterpret_cast<const T*>(buffer);
-        buffer += sizeof(T);
-    }
-    uint m_NumBoxes;
-    uint m_NumClasses;
-    uint m_GridSize;
-    uint64_t m_OutputSize;
+    std::string m_Namespace {""};
 };
 
 #endif // __PLUGIN_LAYER_H__

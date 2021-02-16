@@ -33,10 +33,10 @@ SOFTWARE.
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 
-#include "gst-nvquery.h"
-#include "gstnvdsmeta.h"
-#include "gstnvstreammeta.h"
-#include "nvbuffer.h"
+// #include "gst-nvquery.h"
+// #include "gstnvdsmeta.h"
+// #include "gstnvstreammeta.h"
+// #include "nvbuffer.h"
 #include "yoloplugin_lib.h"
 #include <cuda.h>
 #include <cuda_runtime.h>
@@ -79,14 +79,8 @@ struct _GstYoloPlugin
   // Frame number of the current input buffer
   guint64 frame_num;
 
-  // NPP Stream used for allocating the CUDA task
-  cudaStream_t npp_stream;
-
-  // the scratch conversion host buffer for DGPU
-  void *hconv_buf;
-
   // OpenCV mat to remove padding and convert RGBA to RGB
-    std::vector < cv::Mat * >cvmats;
+  std::vector < cv::Mat * >cvmats;
 
   // Input video info (resolution, color format, framerate, etc)
   GstVideoInfo video_info;
@@ -100,9 +94,6 @@ struct _GstYoloPlugin
 
   // GPU ID on which we expect to execute the task
   guint gpu_id;
-
-  // Boolean indicating if entire frame or cropped objects should be processed
-  gboolean process_full_frame;
 
   //plugin config file path
   gchar *config_file_path;

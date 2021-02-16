@@ -2,7 +2,7 @@
 /**
 MIT License
 
-Copyright (c) 2018 NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2019-2020, NVIDIA CORPORATION. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -40,6 +40,16 @@ SOFTWARE.
 
 #include "ds_image.h"
 #include "plugin_factory.h"
+
+#define NV_CUDA_CHECK(status)                                                                      \
+    {                                                                                              \
+        if (status != 0)                                                                           \
+        {                                                                                          \
+            std::cout << "Cuda failure: " << cudaGetErrorString(status) << " in file " << __FILE__ \
+                      << " at line " << __LINE__ << std::endl;                                     \
+            abort();                                                                               \
+        }                                                                                          \
+    }
 
 class DsImage;
 struct BBox
@@ -124,8 +134,9 @@ std::vector<std::string> loadImageList(const std::string filename, const std::st
 std::vector<BBoxInfo> nmsAllClasses(const float nmsThresh, std::vector<BBoxInfo>& binfo,
                                     const uint numClasses);
 std::vector<BBoxInfo> nonMaximumSuppression(const float nmsThresh, std::vector<BBoxInfo> binfo);
-nvinfer1::ICudaEngine* loadTRTEngine(const std::string planFilePath, PluginFactory* pluginFactory,
-                                     Logger& logger);
+// nvinfer1::ICudaEngine* loadTRTEngine(const std::string planFilePath, PluginFactory* pluginFactory,
+//                                      Logger& logger);
+nvinfer1::ICudaEngine* loadTRTEngine(const std::string planFilePath, Logger& logger);
 std::vector<float> loadWeights(const std::string weightsFilePath, const std::string& networkType);
 std::string dimsToString(const nvinfer1::Dims d);
 void displayDimType(const nvinfer1::Dims d);

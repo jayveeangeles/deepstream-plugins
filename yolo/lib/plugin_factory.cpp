@@ -1,7 +1,7 @@
 /**
 MIT License
 
-Copyright (c) 2018 NVIDIA CORPORATION. All rights reserved.
+Copyright (c) 2019, NVIDIA CORPORATION. All rights reserved.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -24,97 +24,44 @@ SOFTWARE.
 */
 
 #include "plugin_factory.h"
-#include "trt_utils.h"
+#include "NvInferPlugin.h"
+#include <cassert>
+#include <iostream>
+#include <memory>
 
-PluginFactory::PluginFactory() : m_ReorgLayer{nullptr}, m_RegionLayer{nullptr}
+namespace {
+template <typename T>
+void write(char*& buffer, const T& val)
 {
-    for (int i = 0; i < m_MaxLeakyLayers; ++i) m_LeakyReLULayers[i] = nullptr;
+    *reinterpret_cast<T*>(buffer) = val;
+    buffer += sizeof(T);
 }
 
-nvinfer1::IPlugin* PluginFactory::createPlugin(const char* layerName, const void* serialData,
-                                               size_t serialLength)
+template <typename T>
+void read(const char*& buffer, T& val)
 {
-    assert(isPlugin(layerName));
-    if (std::string(layerName).find("leaky") != std::string::npos)
-    {
-        assert(m_LeakyReLUCount >= 0 && m_LeakyReLUCount <= m_MaxLeakyLayers);
-        assert(m_LeakyReLULayers[m_LeakyReLUCount] == nullptr);
-        m_LeakyReLULayers[m_LeakyReLUCount]
-            = unique_ptr_INvPlugin(nvinfer1::plugin::createPReLUPlugin(serialData, serialLength));
-        ++m_LeakyReLUCount;
-        return m_LeakyReLULayers[m_LeakyReLUCount - 1].get();
-    }
-    else if (std::string(layerName).find("reorg") != std::string::npos)
-    {
-        assert(m_ReorgLayer == nullptr);
-        m_ReorgLayer = unique_ptr_INvPlugin(
-            nvinfer1::plugin::createYOLOReorgPlugin(serialData, serialLength));
-        return m_ReorgLayer.get();
-    }
-    else if (std::string(layerName).find("region") != std::string::npos)
-    {
-        assert(m_RegionLayer == nullptr);
-        m_RegionLayer = unique_ptr_INvPlugin(
-            nvinfer1::plugin::createYOLORegionPlugin(serialData, serialLength));
-        return m_RegionLayer.get();
-    }
-    else if (std::string(layerName).find("yolo") != std::string::npos)
-    {
-        assert(m_YoloLayerCount >= 0 && m_YoloLayerCount < m_MaxYoloLayers);
-        assert(m_YoloLayers[m_YoloLayerCount] == nullptr);
-        m_YoloLayers[m_YoloLayerCount]
-            = unique_ptr_IPlugin(new YoloLayerV3(serialData, serialLength));
-        ++m_YoloLayerCount;
-        return m_YoloLayers[m_YoloLayerCount - 1].get();
-    }
-    else
-    {
-        std::cerr << "ERROR: Unrecognised layer : " << layerName << std::endl;
-        assert(0);
-        return nullptr;
-    }
+    val = *reinterpret_cast<const T*>(buffer);
+    buffer += sizeof(T);
 }
+} //namespace
 
-bool PluginFactory::isPlugin(const char* name)
+// Forward declaration of cuda kernels
+cudaError_t cudaYoloLayerV3 (
+    const void* input, void* output, const uint& batchSize,
+    const uint& gridSize, const uint& numOutputClasses,
+    const uint& numBBoxes, uint64_t outputSize, cudaStream_t stream);
+
+YoloLayerV3::YoloLayerV3 (const void* data, size_t length)
 {
-    return ((std::string(name).find("leaky") != std::string::npos)
-            || (std::string(name).find("reorg") != std::string::npos)
-            || (std::string(name).find("region") != std::string::npos)
-            || (std::string(name).find("yolo") != std::string::npos));
-}
-
-void PluginFactory::destroy()
-{
-    m_ReorgLayer.reset();
-    m_RegionLayer.reset();
-
-    for (int i = 0; i < m_MaxLeakyLayers; ++i)
-    {
-        m_LeakyReLULayers[i].reset();
-    }
-
-    for (int i = 0; i < m_MaxYoloLayers; ++i)
-    {
-        m_YoloLayers[i].reset();
-    }
-
-    m_LeakyReLUCount = 0;
-    m_YoloLayerCount = 0;
-}
-
-/******* Yolo Layer V3 *******/
-/*****************************/
-YoloLayerV3::YoloLayerV3(const void* data, size_t length)
-{
-    const char *d = static_cast<const char*>(data), *a = d;
+    const char *d = static_cast<const char*>(data);
     read(d, m_NumBoxes);
     read(d, m_NumClasses);
     read(d, m_GridSize);
     read(d, m_OutputSize);
-    assert(d = a + length);
 };
 
-YoloLayerV3::YoloLayerV3(const uint& numBoxes, const uint& numClasses, const uint& gridSize) :
+YoloLayerV3::YoloLayerV3 (
+    const uint& numBoxes, const uint& numClasses, const uint& gridSize) :
     m_NumBoxes(numBoxes),
     m_NumClasses(numClasses),
     m_GridSize(gridSize)
@@ -125,48 +72,59 @@ YoloLayerV3::YoloLayerV3(const uint& numBoxes, const uint& numClasses, const uin
     m_OutputSize = m_GridSize * m_GridSize * (m_NumBoxes * (4 + 1 + m_NumClasses));
 };
 
-int YoloLayerV3::getNbOutputs() const { return 1; }
-
-nvinfer1::Dims YoloLayerV3::getOutputDimensions(int index, const nvinfer1::Dims* inputs,
-                                                int nbInputDims)
+nvinfer1::Dims
+YoloLayerV3::getOutputDimensions(
+    int index, const nvinfer1::Dims* inputs, int nbInputDims)
 {
     assert(index == 0);
     assert(nbInputDims == 1);
     return inputs[0];
 }
 
-void YoloLayerV3::configure(const nvinfer1::Dims* inputDims, int nbInputs,
-                            const nvinfer1::Dims* outputDims, int nbOutputs, int maxBatchSize)
+bool YoloLayerV3::supportsFormat (
+    nvinfer1::DataType type, nvinfer1::PluginFormat format) const {
+    return (type == nvinfer1::DataType::kFLOAT &&
+            format == nvinfer1::PluginFormat::kNCHW);
+}
+
+void
+YoloLayerV3::configureWithFormat (
+    const nvinfer1::Dims* inputDims, int nbInputs,
+    const nvinfer1::Dims* outputDims, int nbOutputs,
+    nvinfer1::DataType type, nvinfer1::PluginFormat format, int maxBatchSize)
 {
     assert(nbInputs == 1);
+    assert (format == nvinfer1::PluginFormat::kNCHW);
     assert(inputDims != nullptr);
 }
 
-int YoloLayerV3::initialize() { return 0; }
-
-void YoloLayerV3::terminate() {}
-
-size_t YoloLayerV3::getWorkspaceSize(int maxBatchSize) const { return 0; }
-
-int YoloLayerV3::enqueue(int batchSize, const void* const* inputs, void** outputs, void* workspace,
-                         cudaStream_t stream)
+int YoloLayerV3::enqueue(
+    int batchSize, const void* const* inputs, void** outputs, void* workspace,
+    cudaStream_t stream)
 {
-    NV_CUDA_CHECK(cudaYoloLayerV3(inputs[0], outputs[0], batchSize, m_GridSize, m_NumClasses,
-                                  m_NumBoxes, m_OutputSize, stream));
+    CHECK(cudaYoloLayerV3(
+              inputs[0], outputs[0], batchSize, m_GridSize, m_NumClasses, m_NumBoxes,
+              m_OutputSize, stream));
     return 0;
 }
 
-size_t YoloLayerV3::getSerializationSize()
+size_t YoloLayerV3::getSerializationSize() const
 {
     return sizeof(m_NumBoxes) + sizeof(m_NumClasses) + sizeof(m_GridSize) + sizeof(m_OutputSize);
 }
 
-void YoloLayerV3::serialize(void* buffer)
+void YoloLayerV3::serialize(void* buffer) const
 {
-    char *d = static_cast<char*>(buffer), *a = d;
+    char *d = static_cast<char*>(buffer);
     write(d, m_NumBoxes);
     write(d, m_NumClasses);
     write(d, m_GridSize);
     write(d, m_OutputSize);
-    assert(d == a + getSerializationSize());
 }
+
+nvinfer1::IPluginV2* YoloLayerV3::clone() const
+{
+    return new YoloLayerV3 (m_NumBoxes, m_NumClasses, m_GridSize);
+}
+
+REGISTER_TENSORRT_PLUGIN(YoloLayerV3PluginCreator);
