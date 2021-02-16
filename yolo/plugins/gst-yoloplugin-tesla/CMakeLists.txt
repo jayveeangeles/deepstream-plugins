@@ -26,7 +26,7 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 project(yolo-plugin-tesla LANGUAGES CXX)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -std=c++11 -Wall -Wunused-function -Wunused-variable -Wfatal-errors")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fPIC -std=c++14 -Wall -Wunused-function -Wunused-variable -Wfatal-errors")
 set(CMAKE_CXX_FLAGS_DEBUG "-O0 -ggdb")
 set(CMAKE_CXX_FLAGS_RELEASE "-O2")
 
@@ -73,6 +73,8 @@ find_library(NVINFER_LIBRARY nvinfer HINTS ${TRT_SDK_ROOT}/../lib)
 find_library(NVPARSERS_LIBRARY nvparsers HINTS ${TRT_SDK_ROOT}/../lib)
 find_library(NVONNXPARSER_LIBRARY nvonnxparser HINTS ${TRT_SDK_ROOT}/../lib)
 find_library(NVINFERPLUGIN_LIBRARY nvinfer_plugin HINTS ${TRT_SDK_ROOT}/../lib)
+
+MESSAGE(STATUS "Found NVINFERPLUGIN_LIBRARY headers at ${NVINFERPLUGIN_LIBRARY}")
 
 # Add yolo lib as subdir
 add_subdirectory(${PROJECT_SOURCE_DIR}/../../lib ${PROJECT_BINARY_DIR}/lib)
