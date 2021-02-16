@@ -42,7 +42,7 @@ SOFTWARE.
 #include <cuda_runtime.h>
 
 /* Package and library details required for plugin_init */
-#define PACKAGE "nvyolo"
+#define PACKAGE "yololib"
 #define VERSION "1.0"
 #define LICENSE "Proprietary"
 #define DESCRIPTION "NVIDIA example plugin for integration with DeepStream on DGPU"
