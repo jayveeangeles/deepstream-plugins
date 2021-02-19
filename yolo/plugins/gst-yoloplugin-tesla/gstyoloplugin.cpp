@@ -88,6 +88,11 @@ static gboolean gst_yoloplugin_stop (GstBaseTransform * btrans);
 static GstFlowReturn gst_yoloplugin_transform_ip (GstBaseTransform * btrans,
     GstBuffer * inbuf);
 
+static void attach_metadata_to_frame (GstDetectionMetas* metas, 
+  YoloPluginOutput * output);
+
+static void draw_predictions(cv::Mat &img, GstDetectionMetas* metas);
+
 /* Install properties, set sink and src pad capabilities, override the required
  * functions of the base class, These are common to all instances of the
  * element.
@@ -333,6 +338,41 @@ error:
   return FALSE;
 }
 
+static void
+attach_metadata_to_frame (
+  GstDetectionMetas* metas, YoloPluginOutput* output) {
+
+  for (uint i = 0; i < output->numObjects; i++) {
+    GstObjectDetectionMeta *meta = \
+      &metas->detections[metas->detections_count++];
+    
+    const auto xmin = output->object[i].left > 0 ? output->object[i].left : 0;
+    const auto ymin = output->object[i].top > 0 ? output->object[i].top : 0;
+
+    const auto xmax = xmin + output->object[i].width;
+    const auto ymax = ymin + output->object[i].height;
+    const auto label = output->object[i].label;
+
+    strcpy(meta->label, label);
+
+    meta->xmin = xmin;
+    meta->ymin = ymin;
+    meta->xmax = xmax;
+    meta->ymax = ymax;
+  }
+}
+
+static void
+draw_predictions(cv::Mat &img, GstDetectionMetas* metas) {
+  for (uint i = 0; i < metas->detections_count; i++) {
+    GstObjectDetectionMeta *meta = &metas->detections[i];
+
+    cv::rectangle(img, cv::Point(meta->xmin, meta->ymin), \
+      cv::Point(meta->xmax, meta->ymax), cv::Scalar(175, 107, 75), 3);
+    cv::putText(img, meta->label, cv::Point(meta->xmin, meta->ymin), \
+      cv::FONT_HERSHEY_DUPLEX, 1.0, cv::Scalar(0, 255, 0), 2);
+  }
+}
 
 /**
  * Called when element recieves an input buffer from upstream element.
@@ -389,19 +429,12 @@ gst_yoloplugin_transform_ip (GstBaseTransform * btrans, GstBuffer * inbuf)
     if (!outputs.at (k))
       continue;
 
-    const auto xmin = outputs.at(k)->object->left;
-    const auto ymin = outputs.at(k)->object->top;
-    const auto xmax = xmin + outputs.at(k)->object->width;
-    const auto ymax = ymin + outputs.at(k)->object->height;
-    
-    cv::rectangle(img, cv::Point(xmin, ymin), \
-      cv::Point(xmax, ymax), cv::Scalar(255, 0, 0), 3);
-    cv::putText(img, outputs.at(k)->object->label, cv::Point(xmin, ymin), \
-      cv::FONT_HERSHEY_DUPLEX, 1.0, cv::Scalar(0, 255, 0), 2);
+    attach_metadata_to_frame(metas, outputs.at(k));
 
-    // Attach the metadata for the full frame
-    // attach_metadata_full_frame (yoloplugin, inbuf, scale_ratio,
-    //     outputs.at (k), k);
+    if (yoloplugin->yolopluginlib_ctx->inferParams.printPredictionInfo) {
+      draw_predictions(img, metas);
+    }
+
     free (outputs.at (k));
   }
 
